@@ -26,7 +26,8 @@ def train(args, data, show_loss, show_topk):
     export_version = int(time.time())
 
     try:
-        restore_path = max(os.listdir('./model/' + args.restore))
+        # Load the latest model
+        restore_path = max(os.listdir('./model/' + args.dataset + '/' + args.restore))
     except:
         restore_path = None
 
@@ -36,11 +37,12 @@ def train(args, data, show_loss, show_topk):
         if restore_path is None:
             sess.run(tf.global_variables_initializer())
         else:
+            # Weight shift, If new users or movies join
             sess.run(tf.global_variables_initializer())
-            user_emb = np.loadtxt('./model/vocab/user_emb_matrix.txt', dtype=np.float32)
-            item_emb = np.loadtxt('./model/vocab/item_emb_matrix.txt', dtype=np.float32)
-            entity_emb = np.loadtxt('./model/vocab/entity_emb_matrix.txt', dtype=np.float32)
-            relation_emb = np.loadtxt('./model/vocab/relation_emb_matrix.txt', dtype=np.float32)
+            user_emb = np.loadtxt('./model/' + args.dataset + '/vocab/user_emb_matrix.txt', dtype=np.float32)
+            item_emb = np.loadtxt('./model/' + args.dataset + '/vocab/item_emb_matrix.txt', dtype=np.float32)
+            entity_emb = np.loadtxt('./model/' + args.dataset + '/vocab/entity_emb_matrix.txt', dtype=np.float32)
+            relation_emb = np.loadtxt('./model/' + args.dataset + '/vocab/relation_emb_matrix.txt', dtype=np.float32)
 
             user_emb = np.vstack([user_emb, np.random.normal(size=[n_user-len(user_emb), args.dim])])
             item_emb = np.vstack([item_emb, np.random.normal(size=[n_item-len(item_emb), args.dim])])
@@ -49,7 +51,7 @@ def train(args, data, show_loss, show_topk):
 
             var_to_restore = slim.get_variables_to_restore(exclude=var_to_restore)
             saver = tf.train.Saver(var_to_restore)
-            saver.restore(sess, tf.train.latest_checkpoint('./model/' + args.restore + '/' + restore_path))
+            saver.restore(sess, tf.train.latest_checkpoint('./model/' + args.dataset + '/' + args.restore + '/' + restore_path))
             model.init_embeding(sess, {model.user_emb: user_emb,
                                        model.item_emb: item_emb,
                                        model.entity_emb: entity_emb,
@@ -100,15 +102,18 @@ def train(args, data, show_loss, show_topk):
                     print('%.4f\t' % i, end='')
                 print('\n')
 
-        np.savetxt('./model/vocab/user_emb_matrix.txt', model.user_emb_matrix.eval())
-        np.savetxt('./model/vocab/item_emb_matrix.txt', model.item_emb_matrix.eval())
-        np.savetxt('./model/vocab/entity_emb_matrix.txt', model.entity_emb_matrix.eval())
-        np.savetxt('./model/vocab/relation_emb_matrix.txt', model.relation_emb_matrix.eval())
+        # save embedding
+        np.savetxt('./model/' + args.dataset + '/vocab/user_emb_matrix.txt', model.user_emb_matrix.eval())
+        np.savetxt('./model/' + args.dataset + '/vocab/item_emb_matrix.txt', model.item_emb_matrix.eval())
+        np.savetxt('./model/' + args.dataset + '/vocab/entity_emb_matrix.txt', model.entity_emb_matrix.eval())
+        np.savetxt('./model/' + args.dataset + '/vocab/relation_emb_matrix.txt', model.relation_emb_matrix.eval())
 
+        # Model save recovery save/restore method
         saver = tf.train.Saver()
-        wts_name = './model/restore' + "/{}/mkr.ckpt".format(export_version)
+        wts_name = './model/' + args.dataset + '/restore' + "/{}/mkr.ckpt".format(export_version)
         saver.save(sess,  wts_name)
 
+        # save .pd ,deploy with tensorFlow Serving
         inputs = {"user_id": model.user_indices,
                   "item_id": model.item_indices,
                   "head_id": model.head_indices,
@@ -116,7 +121,7 @@ def train(args, data, show_loss, show_topk):
 
         outputs = {"ctr_predict": model.scores_normalized}
 
-        export_path = './model/result'
+        export_path = './model/' + args.dataset + '/result'
         signature = tf.saved_model.signature_def_utils.predict_signature_def(
             inputs=inputs, outputs=outputs)
 

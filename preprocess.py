@@ -1,191 +1,127 @@
-import os
-import redis
 import argparse
-import pandas as pd
+import numpy as np
 
-def text_create(full_path):
-    file = open(full_path, 'w')
-    file.close()
+RATING_FILE_NAME = dict({'movie': 'ratings.dat',
+                         'book': 'BX-Book-Ratings.csv',
+                         'music': 'user_artists.dat'})
+SEP = dict({'movie': '::', 'book': ';', 'music': '\t'})
+THRESHOLD = dict({'movie': 4, 'book': 0, 'music': 0})
 
-def read_index():
-    file = './data/' + DATASET + '/'
-    print('reading item index to entity id file: ' + file + '...')
+def read_item_index_to_entity_id_file():
+    file = './data/' + DATASET + '/item_index2entity_id.txt'
+    print('reading item index to entity id file: ' + file + ' ...')
+    i = 0
+    for line in open(file, encoding='utf-8').readlines():
+        item_index = line.strip().split('\t')[0]
+        satori_id = line.strip().split('\t')[1]
+        item_index_old2new[item_index] = i
+        entity_id2index[satori_id] = i
+        i += 1
 
-    if not os.path.exists(file + 'c2code_index.txt'):
-        text_create(file + 'c2code_index.txt')
+def convert_rating():
+    file = './data/' + DATASET + '/' + RATING_FILE_NAME[DATASET]
 
-    if not os.path.exists(file + 'user_index.txt'):
-        text_create(file + 'user_index.txt')
+    print('reading rating file ...')
+    item_set = set(item_index_old2new.values())
+    user_pos_ratings = dict()
+    user_neg_ratings = dict()
 
-    if not os.path.exists(file + 'relation_index.txt'):
-        text_create(file + 'relation_index.txt')
+    for line in open(file, encoding='utf-8').readlines()[1:]:
+        array = line.strip().split(SEP[DATASET])
 
-    if not os.path.exists(file + 'entity_index.txt'):
-        text_create(file + 'entity_index.txt')
+        # remove prefix and suffix quotation marks for BX dataset
+        if DATASET == 'book':
+            array = list(map(lambda x: x[1:-1], array))
 
-    '''
-    #code索引
-    '''
-    with open(file + 'c2code_index.txt', 'r', encoding='utf-8') as f:
-        for line in f.readlines():
-            array = line.strip().split("\t")
-            if array[1] not in c2code_index:
-                c2code_index[array[1]] = int(array[0])
-    if len(c2code_index) == 0:
-        index = 0
-    else :
-        index = max(c2code_index.values()) + 1
-    for i in code_name['c2code']:
-        if i not in c2code_index:
-            c2code_index[i] = index
-            index += 1
-    with open(file + 'c2code_index.txt', 'w', encoding='utf-8') as f:
-        for line in c2code_index:
-            f.write('%d\t%s\n' % (c2code_index[line],line))
+        item_index_old = array[1]
+        if item_index_old not in item_index_old2new:  # the item is not in the final item set
+            continue
+        item_index = item_index_old2new[item_index_old]
 
-    '''
-    #用户索引
-    '''
-    with open(file + 'user_index.txt', 'r', encoding='utf-8') as f:
-        for line in f.readlines():
-            array = line.strip().split("\t")
-            if array[1] not in user_index:
-                user_index[array[1]] = int(array[0])
-    if len(user_index) == 0:
-        index = 0
-    else:
-        index = max(user_index.values()) + 1
-    for i in user_movies['userid']:
-        if i not in user_index:
-            user_index[i] = index
-            index += 1
-    with open(file + 'user_index.txt', 'w', encoding='utf-8') as f:
-        for line in user_index:
-            f.write('%d\t%s\n' % (user_index[line], line))
+        user_index_old = int(array[0])
 
-    '''
-    #关系索引
-    '''
-    with open(file + 'relation_index.txt', 'r', encoding='utf-8') as f:
-        for line in f.readlines():
-            array = line.strip().split("\t")
-            if array[1] not in relation_index:
-                relation_index[array[1]] = int(array[0])
-    if len(relation_index) == 0:
-        index = 0
-    else :
-        index = max(relation_index.values()) + 1
-    for i in code_relation['relation']:
-        if i not in relation_index:
-            relation_index[i] = index
-            index += 1
-    with open(file + 'relation_index.txt', 'w', encoding='utf-8') as f:
-        for line in relation_index:
-            f.write('%d\t%s\n' % (relation_index[line],line))
+        rating = float(array[2])
+        if rating >= THRESHOLD[DATASET]:
+            if user_index_old not in user_pos_ratings:
+                user_pos_ratings[user_index_old] = set()
+            user_pos_ratings[user_index_old].add(item_index)
+        else:
+            if user_index_old not in user_neg_ratings:
+                user_neg_ratings[user_index_old] = set()
+            user_neg_ratings[user_index_old].add(item_index)
 
-    '''
-    #实体索引
-    '''
-    with open(file + 'entity_index.txt', 'r', encoding='utf-8') as f:
-        for line in f.readlines():
-            array = line.strip().split("\t")
-            if array[1] not in entity_index:
-                entity_index[array[1]] = int(array[0])
-    if len(entity_index) == 0:
-        index = 0
-    else :
-        index = max(entity_index.values()) + 1
-    with open(file + 'c2code_index.txt', 'r', encoding='utf-8') as f:
-        for line in f.readlines():
-            array = line.strip().split("\t")
-            if array[1] not in entity_index:
-                entity_index[array[1]] = index
-                index += 1
-    for i in code_relation['p']:
-        if i not in entity_index:
-            entity_index[i] = index
-            index += 1
-    with open(file + 'entity_index.txt', 'w', encoding='utf-8') as f:
-        for line in entity_index:
-            f.write('%d\t%s\n' % (entity_index[line],line))
+    print('converting rating file ...')
+    writer = open('./data/' + DATASET + '/ratings_final.txt', 'w', encoding='utf-8')
+    user_cnt = 0
+    user_index_old2new = dict()
+    for user_index_old, pos_item_set in user_pos_ratings.items():
+        if user_index_old not in user_index_old2new:
+            user_index_old2new[user_index_old] = user_cnt
+            user_cnt += 1
+        user_index = user_index_old2new[user_index_old]
 
-    print('number of users: %d' % len(user_index))
-    print('number of items: %d' % len(c2code_index))
-    print('number of entities (containing items): %d' % len(entity_index))
-    print('number of relations: %d' % len(relation_index))
+        for item in pos_item_set:
+            writer.write('%d\t%d\t1\n' % (user_index, item))
+        unwatched_set = item_set - pos_item_set
+        if user_index_old in user_neg_ratings:
+            unwatched_set -= user_neg_ratings[user_index_old]
+        for item in np.random.choice(list(unwatched_set), size=len(pos_item_set), replace=False):
+            writer.write('%d\t%d\t0\n' % (user_index, item))
+    writer.close()
+    print('number of users: %d' % user_cnt)
+    print('number of items: %d' % len(item_set))
+
 
 def convert_kg():
     print('converting kg.txt file ...')
+    entity_cnt = len(entity_id2index)
+    relation_cnt = 0
 
-    file = './data/' + DATASET + '/'
+    writer = open('./data/' + DATASET + '/kg_final.txt', 'w', encoding='utf-8')
+    file = open('./data/' + DATASET + '/kg.txt', encoding='utf-8')
 
-    with open(file + 'kg_final.txt', 'w', encoding='utf-8') as f:
-        for i in code_relation.index:
-            content = code_relation.loc[i]
-            if content['c2code'] not in entity_index:
-                continue
-            if content['p'] not in entity_index:
-                continue
-            if content['relation'] not in relation_index:
-                continue
+    for line in file:
+        array = line.strip().split('\t')
+        head_old = array[0]
+        relation_old = array[1]     # relation
+        tail_old = array[2]
 
-            new_c2code_index = entity_index[content['c2code']]
-            new_relation_index = relation_index[content['relation']]
-            new_tag_index = entity_index[content['p']]
-            f.write('%d\t%d\t%d\n' % (new_c2code_index, new_relation_index, new_tag_index))
+        if head_old not in entity_id2index: # Ignore erroneous data
+            continue
+        head = entity_id2index[head_old]
 
-def convert_rating():
-    print('converting ratings.txt file ...')
+        if tail_old not in entity_id2index:
+            entity_id2index[tail_old] = entity_cnt
+            entity_cnt += 1
+        tail = entity_id2index[tail_old]
 
-    file = './data/' + DATASET + '/'
+        if relation_old not in relation_id2index:
+            relation_id2index[relation_old] = relation_cnt
+            relation_cnt += 1
+        relation = relation_id2index[relation_old]
 
-    with open(file + 'ratings_final.txt', 'w', encoding='utf-8') as f:
-        for i in user_movies.index:
-            content = user_movies.loc[i]
-            if content['object'] not in c2code_index:
-                continue
-            if content['userid'] not in user_index:
-                continue
+        writer.write('%d\t%d\t%d\n' % (head, relation, tail))
 
-            new_user_index = user_index[content['userid']]
-            new_c2code_index = c2code_index[content['object']]
-            new_label = content['label']
+    writer.close()
+    print('number of entities (containing items): %d' % entity_cnt)
+    print('number of relations: %d' % relation_cnt)
 
-            f.write('%d\t%d\t%d\n' % (new_user_index, new_c2code_index, new_label))
-
-def set_redis(args):
-    r = redis.Redis(host=args.r_url, port=args.r_port, password=args.r_password)
-    for u in user_index:
-        r.set(u, str(user_index[u]))
-
-    for c in c2code_index:
-        r.set(c, str(c2code_index[c]))
-    r.close()
 
 if __name__ == '__main__':
+    np.random.seed(555)
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('-d','--d', type=str, default='utsc', help='which dataset to preprocess')
-    parser.add_argument('-sysid', '--sysid', type=str, default='t', help='Telecom: t  Mobile: m   Unicom: u')
-    parser.add_argument('-r_url','--r_url', type=str, default="172.19.133.31", help='redis url')
-    parser.add_argument('-r_port','--r_port', type=str, default="6379", help='redis port')
-    parser.add_argument('-r_password','--r_password', type=str, default="redisredis", help='redis password')
-
+    parser.add_argument('-d', type=str, default='movie', help='which dataset to preprocess')
     args = parser.parse_args()
-    DATASET = args.d + args.sysid
+    DATASET = args.d
 
-    code_name = pd.read_csv('./data/' + DATASET + '/code_name.csv', encoding='utf-8', sep="^")
-    code_relation = pd.read_csv('./data/' + DATASET + '/code_relation.csv', encoding='utf-8', sep="^")
-    user_movies = pd.read_csv('./data/' + DATASET + '/user_movies.csv', dtype={'userid': str, 'object': str},encoding='utf-8', sep="^")
+    entity_id2index = dict()
+    relation_id2index = dict()
+    item_index_old2new = dict()
 
-    entity_index = dict()
-    relation_index = dict()
-    c2code_index = dict()
-    user_index = dict()
-
-    read_index()
+    read_item_index_to_entity_id_file()
     convert_rating()
     convert_kg()
 
-    # set_redis(args)
-
     print('done')
+

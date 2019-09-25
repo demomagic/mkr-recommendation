@@ -18,8 +18,9 @@ def load_rating(args):
 
     rating_np = np.loadtxt(rating_file + '.txt', dtype=np.int32)
 
-    n_user = len(np.loadtxt(data_path + "/user_index.txt", dtype=np.str))
-    n_item = len(np.loadtxt(data_path + "/c2code_index.txt", dtype=np.str))
+    n_user = len(set(rating_np[:, 0]))
+    n_item = len(set(rating_np[:, 1]))
+
     train_data, eval_data, test_data = dataset_split(rating_np)
 
     return n_user, n_item, train_data, eval_data, test_data
