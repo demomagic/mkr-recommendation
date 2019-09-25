@@ -30,7 +30,7 @@ For music:
     
     * result/: save the .pd model, deploy model using tensorflow serving
     
-    * vocab/: save the embedding, in order to transfer weight,  use it for iterative training if new users or movie/music/book join
+    * vocab/: save the embedding, in order to transfer weight,  use it for iterative training if new users or new movie/music/book join
 
 * data/
   * book/
